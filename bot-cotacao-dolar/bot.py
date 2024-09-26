@@ -30,6 +30,7 @@ from botcity.maestro import *
 from webdriver_manager.chrome import ChromeDriverManager
 from botcity.plugins.http import BotHttpPlugin
 import pandas as pd
+import mysql.connector
 
 # Disable errors if we are not connected to Maestro
 BotMaestroSDK.RAISE_NOT_CONNECTED = False
@@ -54,44 +55,76 @@ def pegar_produto():
 
     resultados = []
 
-    for item in produtos:
-        preco_real = float(item.get("preco_real", 0))
-        cotacao_dolar = preco_dolar()  
+    # Obtém a cotação do dólar
+    cotacao_dolar = calcular_preco_dolar()
 
-        item["preco_dolar"] = preco_real * cotacao_dolar
+    # Verifica se a cotação foi obtida corretamente
+    if isinstance(cotacao_dolar, float):
+        for item in produtos:
+            preco_real = float(item.get("preco_real", 0))
+            preco_dolar = preco_real * cotacao_dolar  # Calcula o preço em dólar
 
-        resultados.append({
-            "Descrição": item.get("descricao", ""),
-            "Unidade": item.get("unidade", ""),
-            "Quantidade": item.get("quantidade", 0),
-            "Preço Real": preco_real,
-            "Preço Dólar":  f"{item['preco_dolar']:.2f}"
-        })
+            # Atualiza o produto com o preço em dólar
+            item["preco_dolar"] = preco_dolar
 
-        for chave, valor in item.items():
-            if chave != "id":
-                if isinstance(valor, (int, float)):
-                    print(f"{chave}: {valor:.2f}") 
-                else:
-                    print(f"{chave}: {valor}") 
-        print()
+            resultados.append({
+                "Descrição": item.get("descricao", ""),
+                "Unidade": item.get("unidade", ""),
+                "Quantidade": item.get("quantidade", 0),
+                "Preço Real": preco_real,
+                "Preço Dólar":  f"{preco_dolar:.2f}"  # Corrigido aqui para usar a variável preco_dolar
+            })
 
-   
-    df = pd.DataFrame(resultados)
+            # Exibe as informações do produto
+            for chave, valor in item.items():
+                if chave != "id":
+                    if isinstance(valor, (int, float)):
+                        print(f"{chave}: {valor:.2f}") 
+                    else:
+                        print(f"{chave}: {valor}") 
+            print()
 
-    df.to_excel("bot-cotacao-dolar/produtos.xlsx", index=False)
+            # Atualiza o valor no banco de dados
+            atualizar_preco_dolar_no_banco(item["id"], preco_dolar)
+
+        # Cria um arquivo Excel com os resultados
+        df = pd.DataFrame(resultados)
+        df.to_excel("produtos.xlsx", index=False)
+    else:
+        print("Erro ao obter a cotação do dólar.")
 
 
-
-def preco_dolar():
+def calcular_preco_dolar():
     api_dolar = BotHttpPlugin('https://economia.awesomeapi.com.br/last/USD-BRL')
-
     retornoJson = api_dolar.get_as_json()
 
     if "USDBRL" in retornoJson:
         return float(retornoJson["USDBRL"]["high"])
     else:
-        return "Não foi possível atualizar o valor do dolar"
+        return None  # Retorna None se não conseguir obter o valor
+
+
+def atualizar_preco_dolar_no_banco(produto_id, preco_dolar):
+    # Conexão com o banco de dados (exemplo com MySQL)
+    conexao = mysql.connector.connect(
+        host='localhost',
+        port='3306',
+        user='root',
+        password='',
+        database='banco'
+    )
+
+    cursor = conexao.cursor()
+
+    # Query de atualização
+    query = "UPDATE produto SET preco_dolar = %s WHERE id = %s"
+    valores = (preco_dolar, produto_id)
+
+    cursor.execute(query, valores)
+
+    conexao.commit()  # Salva as alterações no banco de dados
+    cursor.close()
+    conexao.close()
     
 
 

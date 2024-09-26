@@ -54,7 +54,7 @@ Content-Type: application/json
 
 // Obter produto pelo ID
 // http://127.0.0.1:5000/produto/id
-GET http://127.0.0.1:5000/produto/1
+GET http://127.0.0.1:5000/produto/3
 Content-Type: application/json
 ###
 
